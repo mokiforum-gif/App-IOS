@@ -1,0 +1,16 @@
+// Build settings shared by everyone working on this project.
+//
+// Signing identity is per-developer, so it does not belong here (or in the
+// .pbxproj, where it would land in everyone's diff). It lives in
+// Config/Local.xcconfig, which is git-ignored: copy Local.xcconfig.example to
+// Local.xcconfig and fill in your own values.
+//
+// The defaults below are what a fresh clone builds with, so the project works
+// without that file — Xcode just asks you to pick a team in Signing &
+// Capabilities the first time you build to a device.
+
+BRUCE_DEVELOPMENT_TEAM =
+BRUCE_BUNDLE_ID = computer.bruce.remote
+
+// Optional include: missing on a fresh clone, and that is not an error.
+#include? "Local.xcconfig"
