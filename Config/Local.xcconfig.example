@@ -1,0 +1,16 @@
+// Copy this file to Config/Local.xcconfig and set your own values.
+// Config/Local.xcconfig is git-ignored, so what you put here stays on your
+// machine and never shows up in a diff.
+//
+//   BRUCE_DEVELOPMENT_TEAM  Your Apple Developer Team ID — a 10-character
+//                           string from Xcode > Settings > Accounts, or from
+//                           developer.apple.com > Membership. Leave it empty to
+//                           pick the team by hand in Signing & Capabilities.
+//
+//   BRUCE_BUNDLE_ID         Override the bundle identifier. Worth setting if a
+//                           free Apple ID rejects the default, or if you want
+//                           this build to sit alongside another install rather
+//                           than replace it.
+
+BRUCE_DEVELOPMENT_TEAM = ABCDE12345
+BRUCE_BUNDLE_ID = com.example.bruceremote
