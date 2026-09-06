@@ -1,0 +1,110 @@
+name: Build IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (blank = build-<run number>)"
+        required: false
+        default: ""
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 16
+        run: |
+          XC=$( (ls -d /Applications/Xcode_16*.app 2>/dev/null || true) | sort -V | tail -n1 )
+          [ -n "$XC" ] || XC=/Applications/Xcode.app
+          sudo xcode-select -s "$XC"
+          xcodebuild -version
+
+      - name: Seed Local.xcconfig
+        run: |
+          if [ -f Config/Local.xcconfig.example ] && [ ! -f Config/Local.xcconfig ]; then
+            cp Config/Local.xcconfig.example Config/Local.xcconfig
+          fi
+
+      - name: Resolve project and scheme
+        id: proj
+        run: |
+          PROJ=$(ls -d *.xcodeproj | head -n1)
+          SCHEME=$(xcodebuild -project "$PROJ" -list -json | jq -r '.project.schemes[0]')
+          echo "proj=$PROJ"     >> "$GITHUB_OUTPUT"
+          echo "scheme=$SCHEME" >> "$GITHUB_OUTPUT"
+          echo "Project: $PROJ / Scheme: $SCHEME"
+
+      - name: Build (unsigned)
+        run: |
+          xcodebuild \
+            -project "${{ steps.proj.outputs.proj }}" \
+            -scheme  "${{ steps.proj.outputs.scheme }}" \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            build
+
+      - name: Package .ipa
+        id: pkg
+        run: |
+          APP=$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name '*.app' | head -n1)
+          [ -n "$APP" ] || { echo "No .app was produced"; exit 1; }
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          NAME="BruceRemote-unsigned.ipa"
+          zip -qry "$NAME" Payload
+          ls -lh "$NAME"
+          echo "ipa=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG="${{ github.ref_name }}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="build-${{ github.run_number }}"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          IPA="${{ steps.pkg.outputs.ipa }}"
+          NOTES=$(cat <<'EOF'
+          Unsigned build of Bruce Remote, produced by CI from this commit.
+
+          **This IPA is not signed and will not install as-is.** Sign it with your
+          own Apple ID before installing — Sideloadly or AltStore on Windows/macOS,
+          Sideloader on Linux. A free Apple ID expires the app after 7 days.
+
+          CoreBluetooth does not work in the Simulator, so a physical iPhone
+          (iOS 17+) is required. Enable the BLE API on the Bruce first:
+          Config > Advanced > Toggle BLE API.
+
+          Source is AGPL-3.0, from BruceDevices/App-IOS.
+          EOF
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$IPA" --clobber
+          else
+            gh release create "$TAG" "$IPA" \
+              --title "Bruce Remote $TAG" \
+              --notes "$NOTES"
+          fi
